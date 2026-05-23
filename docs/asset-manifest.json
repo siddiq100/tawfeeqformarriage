@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/tawfeeqformarriage/static/css/main.acd3de9f.css",
+    "main.js": "/tawfeeqformarriage/static/js/main.b3b97a1a.js",
+    "index.html": "/tawfeeqformarriage/index.html",
+    "main.acd3de9f.css.map": "/tawfeeqformarriage/static/css/main.acd3de9f.css.map",
+    "main.b3b97a1a.js.map": "/tawfeeqformarriage/static/js/main.b3b97a1a.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.acd3de9f.css",
+    "static/js/main.b3b97a1a.js"
+  ]
+}

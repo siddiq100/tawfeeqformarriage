@@ -1,0 +1,30 @@
+{
+  "name": "marriage-app",
+  "version": "1.0.0",
+  "description": "منصة زواج شاملة للتطابق والمواعدة",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run start --workspace=client",
+    "start:server": "npm run dev --workspace=server",
+    "start:client": "npm run start --workspace=client",
+    "build": "npm run build --workspace=client"
+  },
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "keywords": [
+    "marriage",
+    "dating",
+    "matching",
+    "web-app",
+    "react",
+    "node"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/marriage-app.git"
+  }
+}

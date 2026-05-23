@@ -19,6 +19,16 @@ const AdminDashboard = () => {
   const [activationUnit, setActivationUnit] = useState('days');
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [editingUser, setEditingUser] = useState(null);
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+
+  const statusLabels = {
+    approved: 'مفعل',
+    pending: 'قيد الانتظار',
+    suspended: 'معلق',
+    banned: 'محظور'
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -122,6 +132,8 @@ const AdminDashboard = () => {
     }
     return execAdminAction('post', `/api/admin/user/${userId}/activate`);
   };
+  const handleMatch = (userId) => execAdminAction('post', `/api/admin/user/${userId}/set-status`, { status: 'approved' });
+  const handleSetPending = (userId) => execAdminAction('post', `/api/admin/user/${userId}/set-status`, { status: 'pending' });
   const handleSuspend = (userId) => execAdminAction('post', `/api/admin/user/${userId}/suspend`);
   const handleBan = (userId) => execAdminAction('post', `/api/admin/user/${userId}/ban`);
   const handleToggleHideOthers = async (userId, currentValue) => {
@@ -136,6 +148,41 @@ const AdminDashboard = () => {
   };
   const handleDelete = (userId) => execAdminAction('delete', `/api/admin/user/${userId}`);
   const handleClearRestriction = (userId) => execAdminAction('post', `/api/admin/user/${userId}/clear-restriction`);
+
+  const openEditCredentials = (user) => {
+    setEditingUser(user);
+    setEditEmail(user.email || '');
+    setEditPassword('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSaveCredentials = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editEmail.trim() && !editPassword.trim()) {
+      setMessage('❌ ادخل بريدًا أو كلمة مرور لتحديثهما');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await apiClient.post(`/api/admin/user/${editingUser._id}/update-credentials`, {
+        email: editEmail.trim() || undefined,
+        password: editPassword.trim() || undefined
+      }, { headers: getAuthHeaders() });
+      setMessage('✅ تم تحديث بيانات الدخول للمستخدم');
+      setEditingUser(null);
+      setEditEmail('');
+      setEditPassword('');
+      await loadAllUsers();
+      await loadPendingUsers();
+    } catch (error) {
+      console.error('خطأ في تحديث بيانات الدخول:', error);
+      setMessage(error.response?.data?.message || '❌ فشل تحديث بيانات الدخول');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSetRestriction = async () => {
     if (!selectedUserId || !restrictionTarget) {
@@ -403,19 +450,17 @@ const AdminDashboard = () => {
                   <tr key={user._id} style={{ borderBottom: '1px solid #ddd' }}>
                     <td style={{ padding: '1rem' }}>{user.name}</td>
                     <td style={{ padding: '1rem' }}>{user.email}</td>
-                    <td style={{ padding: '1rem' }}>{user.status}</td>
+                    <td style={{ padding: '1rem' }}>{statusLabels[user.status] || user.status}</td>
                     <td style={{ padding: '1rem' }}>{user.isOnline ? '🟢 متصل' : '🔴 غير متصل'}</td>
                     <td style={{ padding: '1rem' }}>{user.accessMode === 'restricted' ? 'مقيد' : 'عام'}</td>
                     <td style={{ padding: '1rem' }}>{user.hideOthers ? 'خاص' : 'مرئي للجميع'}</td>
                     <td style={{ padding: '1rem' }}>{user.activationExpiresAt ? new Date(user.activationExpiresAt).toLocaleDateString('ar') : '—'}</td>
                     <td style={{ padding: '1rem', display: 'grid', gap: '0.5rem', justifyItems: 'center' }}>
-                      <button className="primary" onClick={() => handleActivate(user._id)} style={{ width: '100%' }}>تفعيل/تجديد</button>
+                      <button className="primary" onClick={() => handleMatch(user._id)} style={{ width: '100%' }}>توفيق المستخدم</button>
+                      <button className="primary" onClick={() => handleActivate(user._id)} style={{ width: '100%' }}>تنشيط بمدة</button>
+                      <button className="secondary" onClick={() => handleSetPending(user._id)} style={{ width: '100%' }}>قيد الانتظار</button>
                       <button className="secondary" onClick={() => handleSuspend(user._id)} style={{ width: '100%' }}>تعليق</button>
-                      <button className="secondary" onClick={() => handleBan(user._id)} style={{ width: '100%', backgroundColor: '#d32f2f', color: 'white' }}>حظر</button>
-                      <button className="secondary" onClick={() => handleToggleHideOthers(user._id, user.hideOthers)} style={{ width: '100%' }}>
-                        {user.hideOthers ? 'إظهار الباقي' : 'إخفاء الباقي'}
-                      </button>
-                      <button className="secondary" onClick={() => handleClearRestriction(user._id)} style={{ width: '100%' }}>إزالة القيد</button>
+                      <button className="secondary" onClick={() => openEditCredentials(user)} style={{ width: '100%' }}>تعديل بيانات الدخول</button>
                       <button className="secondary" onClick={() => handleDelete(user._id)} style={{ width: '100%', backgroundColor: '#f44336', color: 'white' }}>حذف</button>
                     </td>
                   </tr>
@@ -425,6 +470,45 @@ const AdminDashboard = () => {
           </div>
         )}
       </div>
+
+      {editingUser && (
+        <div className="card" style={{ marginBottom: '2rem', border: '2px solid #3f51b5' }}>
+          <h2>✏️ تعديل بيانات الدخول للمستخدم</h2>
+          <p>يمكنك تعديل البريد الإلكتروني وكلمة المرور للمستخدم التالي.</p>
+          <form onSubmit={handleSaveCredentials}>
+            <div className="form-group">
+              <label>المستخدم</label>
+              <input type="text" value={`${editingUser.name} — ${editingUser.email}`} readOnly />
+            </div>
+            <div className="form-group">
+              <label>البريد الإلكتروني الجديد</label>
+              <input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="أدخل البريد الجديد إذا رغبت"
+              />
+            </div>
+            <div className="form-group">
+              <label>كلمة المرور الجديدة</label>
+              <input
+                type="password"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                placeholder="اتركها فارغة إذا لم ترغب بالتغيير"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button className="primary" type="submit" disabled={loading}>
+                {loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+              <button className="secondary" type="button" onClick={() => setEditingUser(null)}>
+                إلغاء
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: '2rem' }}>
         <h2>🧑‍💼 المشرفون الحاليون</h2>

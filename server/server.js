@@ -758,6 +758,58 @@ app.post('/api/admin/user/:userId/activate-duration', adminAuthMiddleware, async
   }
 });
 
+app.post('/api/admin/user/:userId/set-status', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'approved', 'suspended', 'banned'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'حالة المستخدم غير صحيحة' });
+    }
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'المستخدم غير موجود' });
+
+    user.status = status;
+    await user.save();
+
+    res.json({ message: 'تم تحديث حالة المستخدم', user: user.toObject() });
+  } catch (error) {
+    console.error('خطأ في تحديث حالة المستخدم:', error);
+    res.status(500).json({ message: 'خطأ في تحديث حالة المستخدم' });
+  }
+});
+
+app.post('/api/admin/user/:userId/update-credentials', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email && !password) {
+      return res.status(400).json({ message: 'ادخل البريد أو كلمة المرور للتحديث' });
+    }
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'المستخدم غير موجود' });
+
+    if (email) {
+      const existingEmailUser = await User.findOne({ email, _id: { $ne: user._id } });
+      if (existingEmailUser) {
+        return res.status(400).json({ message: 'هذا البريد مستخدم بالفعل من قبل مستخدم آخر' });
+      }
+      user.email = email;
+    }
+
+    if (password) {
+      user.password = password;
+    }
+
+    await user.save();
+
+    res.json({ message: 'تم تحديث بيانات الدخول للمستخدم', user: user.toObject() });
+  } catch (error) {
+    console.error('خطأ في تحديث بيانات الدخول للمستخدم:', error);
+    res.status(500).json({ message: 'خطأ في تحديث بيانات الدخول للمستخدم' });
+  }
+});
+
 app.post('/api/admin/user/:userId/suspend', adminAuthMiddleware, async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(req.params.userId, { status: 'suspended', isOnline: false }, { new: true }).select('-password');

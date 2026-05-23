@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Frontend for Tawfeeq - Marriage Matching Platform",
   "private": true,
+  "homepage": "https://siddiq100.github.io/tawfeeqformarriage",
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

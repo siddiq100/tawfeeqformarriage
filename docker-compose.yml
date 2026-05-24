@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongo:
+    image: mongo:latest
+    container_name: tawfeeq_mongo
+    environment:
+      MONGO_INITDB_DATABASE: tawfeeq
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - tawfeeq_network
+
+  # Backend API Server
+  server:
+    build: ./server
+    container_name: tawfeeq_server
+    environment:
+      PORT: 5000
+      MONGO_URI: mongodb://mongo:27017/tawfeeq
+      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key}
+      EMAIL_USER: ${EMAIL_USER:-your_email@example.com}
+      EMAIL_PASS: ${EMAIL_PASS:-your_email_password}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-siddiqa@tawfeeq.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin_password}
+      CLIENT_URL: http://localhost:3000
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongo
+    networks:
+      - tawfeeq_network
+    restart: unless-stopped
+
+  # Frontend React App (with Nginx)
+  client:
+    build: ./client
+    container_name: tawfeeq_client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - tawfeeq_network
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+
+networks:
+  tawfeeq_network:
+    driver: bridge

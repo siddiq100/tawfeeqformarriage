@@ -10,6 +10,23 @@
 <body>
   <header class="site-header"><h1>لوحة الإدارة</h1></header>
   <main class="container">
+    <section>
+      <h2>إدارة البنرات والإعلانات</h2>
+      <p>قم بتحميل صور البنر أو عدة صور لتشكيل نافذة إعلانية (carousel).</p>
+
+      <div class="banner-admin">
+        <label>العنوان (اختياري): <input id="bannerTitle" type="text"></label>
+        <label>الوصف (اختياري): <input id="bannerDesc" type="text"></label>
+
+        <label>رفع صور البنر (يمكن اختيار أكثر من صورة):</label>
+        <input id="bannerFiles" type="file" accept="image/*" multiple>
+
+        <div id="preview" class="banner-preview"></div>
+
+        <button id="uploadBtn" class="btn">رفع الصور وحفظ البنرات</button>
+        <div id="adminMessage" style="margin-top:8px;color:green"></div>
+      </div>
+    </section>
     <div id="adminUsers"></div>
   </main>
   <footer class="site-footer"><p>© 2026 توفيق</p></footer>

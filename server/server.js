@@ -929,6 +929,17 @@ app.get('/api/home-banner', async (req, res) => {
   }
 });
 
+// Return all banners (carousel / advert windows)
+app.get('/api/home-banners', async (req, res) => {
+  try {
+    const banners = await Banner.find().sort({ updatedAt: -1 }).lean();
+    res.json({ banners });
+  } catch (error) {
+    console.error('خطأ في جلب البنرات:', error);
+    res.status(500).json({ message: 'خطأ في جلب البنرات' });
+  }
+});
+
 app.get('/api/admin/home-banner', adminAuthMiddleware, async (req, res) => {
   try {
     const banner = await Banner.findOne().lean();
@@ -970,6 +981,27 @@ app.post('/api/admin/home-banner/upload', adminAuthMiddleware, upload.single('ba
   } catch (error) {
     console.error('خطأ في رفع صورة البنر:', error);
     res.status(500).json({ message: 'خطأ في رفع صورة البنر' });
+  }
+});
+
+// Admin: create/update multiple banners (store images array)
+app.post('/api/admin/home-banners', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { images = [], title, description } = req.body;
+    if (!Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ message: 'الصور مطلوبة كمصفوفة' });
+    }
+
+    const banner = await Banner.findOneAndUpdate(
+      {},
+      { images, title: title || '', description: description || '', updatedAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({ message: 'تم حفظ البنرات بنجاح', banner });
+  } catch (error) {
+    console.error('خطأ في حفظ البنرات:', error);
+    res.status(500).json({ message: 'خطأ في حفظ البنرات' });
   }
 });
 

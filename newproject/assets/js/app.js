@@ -131,6 +131,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Admin: banner upload UI
   const uploadBtn = document.getElementById('uploadBtn');
+  const adminLoginForm = document.getElementById('adminLoginForm');
+  const adminArea = document.getElementById('adminArea');
+  const adminLogoutBtn = document.getElementById('adminLogout');
+
+  // show/hide admin area based on token
+  const checkAuth = ()=>{
+    const token = localStorage.getItem('tawfeeq_token');
+    if (token){ adminArea.style.display = ''; if (adminLoginForm) adminLoginForm.style.display='none'; }
+    else { if (adminArea) adminArea.style.display='none'; if (adminLoginForm) adminLoginForm.style.display='block'; }
+  };
+  checkAuth();
+
+  if (adminLogoutBtn){ adminLogoutBtn.addEventListener('click', ()=>{ localStorage.removeItem('tawfeeq_token'); checkAuth(); }); }
+
+  if (adminLoginForm){
+    adminLoginForm.addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(adminLoginForm);
+      const data = Object.fromEntries(fd.entries());
+      try{
+        const res = await api.adminLogin(data);
+        if (res && res.token){ localStorage.setItem('tawfeeq_token', res.token); document.getElementById('loginMessage').textContent = res.message || 'تم الدخول'; checkAuth(); }
+        else { document.getElementById('loginMessage').textContent = res.message || 'خطأ في الاستجابة'; }
+      }catch(err){ document.getElementById('loginMessage').textContent = err.message || 'خطأ'; }
+    });
+  }
   if (uploadBtn){
     const filesInput = document.getElementById('bannerFiles');
     const preview = document.getElementById('preview');

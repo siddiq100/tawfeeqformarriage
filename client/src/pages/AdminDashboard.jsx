@@ -19,6 +19,13 @@ const AdminDashboard = () => {
   const [activationUnit, setActivationUnit] = useState('days');
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [bannerImageUrl, setBannerImageUrl] = useState('');
+  const [bannerTitle, setBannerTitle] = useState('');
+  const [bannerDescription, setBannerDescription] = useState('');
+  const [bannerImageFile, setBannerImageFile] = useState(null);
+  const [multiBannerFiles, setMultiBannerFiles] = useState([]);
+  const [multiPreviewUrls, setMultiPreviewUrls] = useState([]);
+  const [managerMessages, setManagerMessages] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
@@ -37,6 +44,8 @@ const AdminDashboard = () => {
       loadAllUsers();
       loadPendingUsers();
       loadAdminUsers();
+      loadBannerSettings();
+      loadManagerMessages();
     }
   }, []);
 
@@ -57,6 +66,8 @@ const AdminDashboard = () => {
       await loadAllUsers();
       await loadPendingUsers();
       await loadAdminUsers();
+      await loadBannerSettings();
+      await loadManagerMessages();
     } catch (error) {
       setMessage('❌ بيانات تسجيل الدخول غير صحيحة');
     } finally {
@@ -67,6 +78,114 @@ const AdminDashboard = () => {
   const getAuthHeaders = () => {
     const token = localStorage.getItem('adminToken');
     return { Authorization: `Bearer ${token}` };
+  };
+
+  const isErrorMessage = (msg) => msg && String(msg).trim().startsWith('❌');
+  const isSuccessMessage = (msg) => msg && String(msg).trim().startsWith('✅');
+  const messageBoxStyle = (msg) => {
+    if (isErrorMessage(msg)) {
+      return { padding: '1rem', marginBottom: '1rem', backgroundColor: '#ffebee', color: '#b00020', borderRadius: '8px', border: '1px solid rgba(244,67,54,0.18)' };
+    }
+    if (isSuccessMessage(msg)) {
+      return { padding: '1rem', marginBottom: '1rem', backgroundColor: '#e8f5e9', color: '#1b5e20', borderRadius: '8px', border: '1px solid rgba(46,125,50,0.12)' };
+    }
+    return { padding: '1rem', marginBottom: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' };
+  };
+
+  const loadBannerSettings = async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.get('/api/admin/home-banner', { headers: getAuthHeaders() });
+      const banner = response.data.banner || {};
+      setBannerImageUrl(banner.imageUrl || '');
+      setBannerTitle(banner.title || '');
+      setBannerDescription(banner.description || '');
+    } catch (error) {
+      console.error('خطأ في تحميل إعدادات البنر:', error);
+      setMessage('❌ خطأ في تحميل إعدادات البنر');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMultiFilesChange = (e) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    setMultiBannerFiles(files);
+    setMultiPreviewUrls(files.map(f => URL.createObjectURL(f)));
+  };
+
+  const handleSaveMultiBanners = async (e) => {
+    e.preventDefault();
+    if (multiBannerFiles.length === 0) {
+      setMessage('❌ اختر ملفًا واحدًا على الأقل');
+      return;
+    }
+    setLoading(true);
+    try {
+      const uploaded = [];
+      for (const f of multiBannerFiles) {
+        const formData = new FormData();
+        formData.append('bannerImage', f);
+        const uploadRes = await apiClient.post('/api/admin/home-banner/upload', formData, { headers: getAuthHeaders() });
+        if (uploadRes.data && uploadRes.data.imageUrl) uploaded.push(uploadRes.data.imageUrl);
+      }
+      await apiClient.post('/api/admin/home-banners', { images: uploaded, title: bannerTitle, description: bannerDescription }, { headers: getAuthHeaders() });
+      setMessage('✅ تم حفظ بنرات الكاروسيل بنجاح');
+      setMultiBannerFiles([]);
+      setMultiPreviewUrls([]);
+      await loadBannerSettings();
+    } catch (error) {
+      console.error('خطأ في رفع بنرات الكاروسيل:', error);
+      setMessage('❌ فشل رفع بنرات الكاروسيل');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBannerFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setBannerImageFile(e.target.files[0]);
+    }
+  };
+
+  const handleUpdateBanner = async (e) => {
+    e.preventDefault();
+    if (!bannerImageUrl && !bannerImageFile) {
+      setMessage('❌ أدخل رابط صورة أو اختر ملف صورة');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let imageUrl = bannerImageUrl;
+
+      if (bannerImageFile) {
+        const formData = new FormData();
+        formData.append('bannerImage', bannerImageFile);
+        const uploadResponse = await apiClient.post('/api/admin/home-banner/upload', formData, {
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        imageUrl = uploadResponse.data.imageUrl;
+      }
+
+      await apiClient.post('/api/admin/home-banner', {
+        imageUrl,
+        title: bannerTitle,
+        description: bannerDescription
+      }, { headers: getAuthHeaders() });
+
+      setMessage('✅ تم حفظ إعدادات البنر بنجاح');
+      setBannerImageFile(null);
+      await loadBannerSettings();
+    } catch (error) {
+      console.error('خطأ في حفظ إعدادات البنر:', error);
+      setMessage('❌ فشل حفظ إعدادات البنر');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadAllUsers = async () => {
@@ -249,11 +368,33 @@ const AdminDashboard = () => {
       setNewAdminEmail('');
       setNewAdminPassword('');
       await loadAdminUsers();
+      await loadManagerMessages();
     } catch (error) {
       console.error('خطأ في إنشاء مشرف جديد:', error);
       setMessage(error.response?.data?.message || '❌ فشل إنشاء المشرف');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadManagerMessages = async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.get('/api/admin/manager-messages', { headers: getAuthHeaders() });
+      setManagerMessages(response.data.messages || []);
+    } catch (error) {
+      console.error('خطأ في تحميل رسائل المدير:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markManagerMessageRead = async (id) => {
+    try {
+      await apiClient.post(`/api/admin/manager-messages/${id}/read`, {}, { headers: getAuthHeaders() });
+      setManagerMessages(prev => prev.map(m => m._id === id ? { ...m, read: true } : m));
+    } catch (error) {
+      console.error('خطأ في وضع الرسالة كمقروءة:', error);
     }
   };
 
@@ -269,8 +410,13 @@ const AdminDashboard = () => {
       <div className="container" style={{ maxWidth: '500px', margin: '3rem auto' }}>
         <div className="card">
           <h1>🔐 لوحة تحكم الإدارة</h1>
+          <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#1c032c', borderRadius: '16px', border: '1px solid rgba(214, 30, 255, 0.25)', color: '#f7f7ff' }}>
+            <p style={{ margin: 0, fontWeight: '700' }}>بيانات تسجيل الدخول للمشرف:</p>
+            <p style={{ margin: '0.5rem 0 0' }}><strong>البريد الإلكتروني:</strong> <code>siddiqa@tawfeeq.com</code></p>
+            <p style={{ margin: '0.25rem 0 0' }}><strong>كلمة المرور:</strong> <code>admin123</code></p>
+          </div>
 
-          {message && <div style={{ padding: '1rem', marginBottom: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>{message}</div>}
+          {message && <div style={messageBoxStyle(message)}>{message}</div>}
 
           <form onSubmit={handleAdminLogin}>
             <div className="form-group">
@@ -307,9 +453,25 @@ const AdminDashboard = () => {
         <button className="secondary" onClick={handleLogout}>تسجيل خروج</button>
       </div>
 
-      {message && <div style={{ padding: '1rem', marginBottom: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>{message}</div>}
+      {message && <div style={messageBoxStyle(message)}>{message}</div>}
 
       <div className="card" style={{ marginBottom: '2rem' }}>
+        <h2>🔔 إشعارات المدير (مطابقات جديدة)</h2>
+        {managerMessages.length === 0 && <p>لا توجد إشعارات جديدة.</p>}
+        {managerMessages.map(msg => (
+          <div key={msg._id} style={{ padding: '0.75rem', borderRadius: '8px', marginBottom: '0.75rem', backgroundColor: msg.read ? '#f5f5f5' : '#fff8e1', border: '1px solid rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <strong>{msg.message}</strong>
+                <div style={{ fontSize: '0.9rem', color: '#555' }}>{msg.score ? `Score: ${msg.score}` : ''}</div>
+                {msg.newProfileId && <div style={{ fontSize: '0.85rem' }}>New: {msg.newProfileId.userId?.name || ''} — {msg.newProfileId.location || ''}</div>}
+                {msg.matchedProfileId && <div style={{ fontSize: '0.85rem' }}>Matched: {msg.matchedProfileId.userId?.name || ''} — {msg.matchedProfileId.location || ''}</div>}
+              </div>
+              {!msg.read && <button className="secondary" onClick={() => markManagerMessageRead(msg._id)}>وضع كمقروءة</button>}
+            </div>
+          </div>
+        ))}
+
         <h2>🕘 تفعيل العضو بالمدة</h2>
         <p>اختر مدة التفعيل بالأيام أو الأشهر قبل الضغط على زر التنشيط للمستخدم.</p>
         <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
@@ -334,7 +496,86 @@ const AdminDashboard = () => {
       </div>
 
       <div className="card" style={{ marginBottom: '2rem' }}>
-        <h2>📣 إشعار البث للمستخدمين</h2>
+        <h2>�️ إعداد صورة البنر في الصفحة الرئيسية</h2>
+        <p>يمكنك تحديث الصورة والنص الذي يظهر في منتصف الصفحة الرئيسية.</p>
+        <form onSubmit={handleUpdateBanner}>
+          <div className="form-group">
+            <label>رابط الصورة</label>
+            <input
+              type="text"
+              value={bannerImageUrl}
+              onChange={(e) => setBannerImageUrl(e.target.value)}
+              placeholder="https://example.com/banner.jpg"
+            />
+          </div>
+          <div className="form-group">
+            <label>رفع ملف صورة</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleBannerFileChange}
+            />
+            {bannerImageFile && (
+              <p style={{ color: '#c8d3ff', marginTop: '0.75rem' }}>تم اختيار: {bannerImageFile.name}</p>
+            )}
+          </div>
+          <div className="form-group">
+            <label>عنوان البنر</label>
+            <input
+              type="text"
+              value={bannerTitle}
+              onChange={(e) => setBannerTitle(e.target.value)}
+              placeholder="أضف عنوانًا موجزًا"
+            />
+          </div>
+          <div className="form-group">
+            <label>وصف البنر</label>
+            <textarea
+              value={bannerDescription}
+              onChange={(e) => setBannerDescription(e.target.value)}
+              placeholder="أضف وصفًا قصيرًا"
+              rows="3"
+            />
+          </div>
+          {bannerImageUrl && (
+            <div style={{ marginBottom: '1rem' }}>
+              <strong>معاينة:</strong>
+              <img
+                src={bannerImageUrl}
+                alt="banner preview"
+                style={{ maxWidth: '100%', borderRadius: '18px', marginTop: '0.75rem', boxShadow: '0 16px 40px rgba(0,0,0,0.35)' }}
+              />
+            </div>
+          )}
+          <button className="primary" type="submit" disabled={loading} style={{ width: '100%' }}>
+            {loading ? 'جارٍ الحفظ...' : 'حفظ إعدادات البنر'}
+          </button>
+        </form>
+      </div>
+
+      <div className="card" style={{ marginBottom: '2rem' }}>
+        <h2>🎚️ رفع عدة صور للبنر (Carousel)</h2>
+        <p>حمّل عدة صور ليتم عرضها كـ carousel في الصفحة الرئيسية.</p>
+        <form onSubmit={handleSaveMultiBanners}>
+          <div className="form-group">
+            <label>رفع ملفات متعددة</label>
+            <input type="file" accept="image/*" multiple onChange={handleMultiFilesChange} />
+          </div>
+          {multiPreviewUrls.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              {multiPreviewUrls.map((u, i) => (
+                <img key={i} src={u} alt={`preview-${i}`} style={{ maxWidth: '160px', borderRadius: '8px', boxShadow: '0 8px 18px rgba(0,0,0,0.2)' }} />
+              ))}
+            </div>
+          )}
+          <button className="primary" type="submit" disabled={loading} style={{ width: '100%' }}>
+            {loading ? 'جارٍ الرفع...' : 'رفع وحفظ صور الكاروسيل'}
+          </button>
+        </form>
+      </div>
+
+      <div className="card" style={{ marginBottom: '2rem' }}>
+        <h2>�📣 إشعار البث للمستخدمين</h2>
         <p>أرسل رسالة إشعار لكل المستخدمين المسجلين. يمكنك تخصيص العنوان والنص.</p>
         <form onSubmit={handleBroadcast}>
           <div className="form-group">

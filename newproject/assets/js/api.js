@@ -16,6 +16,9 @@ export async function register(data){
 export async function login(data){
   return request('/api/auth/login',{method:'POST',body:JSON.stringify(data)});
 }
+export async function adminLogin(data){
+  return request('/api/admin/login',{method:'POST',body:JSON.stringify(data)});
+}
 export async function verifyEmail(data){
   return request('/api/auth/verify-email',{method:'POST',body:JSON.stringify(data)});
 }

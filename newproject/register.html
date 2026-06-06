@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>تسجيل جديد - توفيق</title>
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script type="module" src="assets/js/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <h1>تسجيل جديد</h1>
+    <nav>
+      <a href="index.html">الرئيسية</a>
+      <a href="login.html">تسجيل دخول</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <form id="registerForm" class="form">
+      <label>الاسم<input name="name" required></label>
+      <label>البريد الإلكتروني<input type="email" name="email" required></label>
+      <label>كلمة المرور<input type="password" name="password" required></label>
+      <label>الجنس
+        <select name="gender">
+          <option value="male">ذكر</option>
+          <option value="female">أنثى</option>
+        </select>
+      </label>
+      <label>العمر<input name="age" type="number" required></label>
+      <label>الموقع<input name="location"></label>
+      <button class="btn" type="submit">سجل الآن</button>
+    </form>
+    <div id="message" class="message"></div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 توفيق</p>
+  </footer>
+</body>
+</html>

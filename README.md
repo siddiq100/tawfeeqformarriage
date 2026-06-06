@@ -8,6 +8,33 @@
 - `docker-compose.yml` - لتشغيل التطبيق بقاعدة بيانات MongoDB محلية باستخدام Docker
 - `server/Dockerfile` و `client/Dockerfile` - تعريفات بناء الحاويات
 
+## نشر مباشر على Render
+يمكنك نشر هذا المشروع مباشرة إلى Render باستخدام ملف `render.yaml` الموجود في جذر المشروع.
+
+1. تأكد من أنك قد دفعت الكود إلى GitHub على الفرع `main`.
+2. في Render أنشئ خدمة `Web Service` جديدة مرتبطة بالمستودع.
+   - Build command: `cd server && npm install`
+   - Start command: `cd server && npm start`
+   - Branch: `main`
+   - Health check path: `/api/health`
+3. أضف متغيرات البيئة في Render:
+   - `MONGO_URI`
+   - `JWT_SECRET`
+   - `EMAIL_HOST`
+   - `EMAIL_PORT`
+   - `EMAIL_USER`
+   - `EMAIL_PASS`
+   - `EMAIL_FROM`
+   - `CLIENT_URL = https://<your-service>.onrender.com`
+   - `CORS_ORIGIN = https://<your-service>.onrender.com`
+4. بعد النشر، سيعمل الموقع من خلال نفس الخادم ولن تحتاج واجهة React المنفصلة.
+
+> إذا أردت نشرًا تلقائيًا من GitHub، أضف أسرار GitHub التالية في إعدادات المستودع:
+> - `RENDER_SERVICE_ID` (الـ service id من Render)
+> - `RENDER_API_KEY` (Render API key)
+>
+> ثم استخدم وِرْك فْلُو `./github/workflows/deploy-render.yml` لنشر كل دفعه إلى Render.
+
 ## تشغيل محلي (بدون Docker)
 1. تثبيت الخادم:
 

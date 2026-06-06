@@ -7,12 +7,16 @@ import nodemailer from 'nodemailer';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import os from 'os';
 import User from './models/User.js';
 import Profile from './models/Profile.js';
 import Message from './models/Message.js';
 import Contact from './models/Contact.js';
 import Notification from './models/Notification.js';
 import Admin from './models/Admin.js';
+import Banner from './models/Banner.js';
+import ManagerMessage from './models/ManagerMessage.js';
 import { authMiddleware, adminAuthMiddleware } from './middleware/auth.js';
 
 dotenv.config();
@@ -23,11 +27,56 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Middleware
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:3000', 'http://localhost:3003'];
+
+if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) {
+  allowedOrigins.push(process.env.CLIENT_URL);
+}
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000'
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  }
 }));
 app.use(express.json());
 app.use(express.static('uploads'));
+
+const newProjectPath = path.join(__dirname, '..', 'newproject');
+if (fs.existsSync(newProjectPath)) {
+  app.use(express.static(newProjectPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(newProjectPath, 'index.html'));
+  });
+}
+
+// Serve client build if present (links frontend with backend)
+const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
+if (fs.existsSync(clientBuildPath)) {
+  // Serve at the homepage path used when the app was built
+  app.use('/tawfeeqformarriage', express.static(clientBuildPath));
+
+  // Also serve files at root for convenience
+  app.use(express.static(clientBuildPath));
+
+  // Serve index.html for requests to the prefixed path
+  app.get('/tawfeeqformarriage*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+
+  // For any other non-API route, serve the React app
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
@@ -75,7 +124,7 @@ const sendVerificationEmail = async ({ to, code }) => {
 };
 
 // MongoDB Connection
-const dbURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/tawfeeq';
+const dbURI = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/tawfeeq';
 mongoose.connect(dbURI)
   .then(() => console.log('✅ قاعدة البيانات متصلة'))
   .catch(err => console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err));
@@ -96,10 +145,15 @@ app.get('/api/health', (req, res) => {
 // Authentication Routes
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, name, gender } = req.body;
-    
-    if (!email || !password || !name || !gender) {
-      return res.status(400).json({ message: 'جميع الحقول مطلوبة' });
+    const {
+      email, password, name, gender, age, nationality, tribe,
+      location, education, height, weight, color, hair,
+      appearanceDesc, preferences, interests, partnerPreferences, religion
+    } = req.body;
+
+    // Required fields for registration per request
+    if (!email || !password || !name || !gender || !age || !nationality || !tribe || !location || !education) {
+      return res.status(400).json({ message: 'جميع الحقول الأساسية مطلوبة' });
     }
 
     const existingUser = await User.findOne({ email });
@@ -115,13 +169,95 @@ app.post('/api/auth/register', async (req, res) => {
       password,
       name,
       gender,
+      age: Number(age),
+      location,
+      religion: religion || '',
       status: 'pending',
       isEmailVerified: false,
       emailVerificationCode: verificationCode,
-      verificationExpiresAt
+      verificationExpiresAt,
+      profileComplete: true
     });
 
     await user.save();
+
+    // Create profile document
+    const profile = new Profile({
+      userId: user._id,
+      age: Number(age),
+      location,
+      nationality,
+      tribe,
+      education,
+      height: height ? Number(height) : undefined,
+      weight: weight ? Number(weight) : undefined,
+      color: color || '',
+      hair: hair || '',
+      appearanceDesc: appearanceDesc || '',
+      preferences: preferences ? (Array.isArray(preferences) ? preferences : String(preferences).split(',').map(s => s.trim())) : [],
+      bio: '',
+      religion: religion || '',
+      interests: interests ? (Array.isArray(interests) ? interests : String(interests).split(',').map(s => s.trim())) : [],
+      images: []
+    });
+
+    await profile.save();
+
+    // --- Automatic matching for manager notifications ---
+    try {
+      // Fetch candidate profiles (approved) of opposite gender
+      const searchGender = user.gender === 'male' ? 'female' : 'male';
+      const candidates = await Profile.find({ isPublic: true }).populate('userId').exec();
+
+      const scored = candidates.map(p => {
+        const pUser = p.userId;
+        if (!pUser || pUser.status !== 'approved' || pUser.gender !== searchGender) return null;
+
+        let score = 0;
+        // location
+        if (p.location && profile.location && p.location.toLowerCase().includes(String(profile.location).toLowerCase())) score += 25;
+        // age proximity (within +/-2 years) gives some points, within range gives more
+        const age = p.age || 0;
+        const newAge = profile.age || 0;
+        if (newAge && age) {
+          const diff = Math.abs(age - newAge);
+          if (diff === 0) score += 20;
+          else if (diff <= 2) score += 15;
+          else if (diff <= 5) score += 8;
+        }
+        // religion
+        if (profile.religion && p.religion && profile.religion.toLowerCase() === p.religion.toLowerCase()) score += 15;
+        // interests overlap
+        const aInterests = (profile.interests || []).map(i => String(i).toLowerCase());
+        const bInterests = (p.interests || []).map(i => String(i).toLowerCase());
+        if (aInterests.length > 0 && bInterests.length > 0) {
+          const overlap = aInterests.filter(i => bInterests.includes(i)).length;
+          score += Math.min(25, overlap * 8);
+        }
+        // picture + completeness
+        if (pUser.profilePicture) score += 10;
+        if (p.profileComplete) score += 5;
+        score = Math.min(100, Math.round(score));
+
+        return { profile: p, score };
+      }).filter(Boolean);
+
+      const THRESHOLD = 50; // notify manager when score >= threshold
+      const matchesToNotify = scored.filter(s => s.score >= THRESHOLD).sort((a,b)=>b.score-a.score);
+
+      for (const m of matchesToNotify) {
+        const msg = new ManagerMessage({
+          newProfileId: profile._id,
+          matchedProfileId: m.profile._id,
+          score: m.score,
+          message: `New signup ${user.name} matched with ${m.profile.userId?.name || 'N/A'} (score ${m.score})`
+        });
+        await msg.save();
+      }
+    } catch (matchErr) {
+      console.error('خطأ أثناء حساب المطابقات أو إرسال إشعار الإدارة:', matchErr);
+    }
+
     await sendVerificationEmail({ to: email, code: verificationCode });
 
     res.status(201).json({ 
@@ -489,6 +625,77 @@ app.get('/api/profiles', authMiddleware, async (req, res) => {
   }
 });
 
+// Matches endpoint - scores profiles against provided criteria or current user's implicit preferences
+app.get('/api/matches', authMiddleware, async (req, res) => {
+  try {
+    const { location, ageMin, ageMax, interests, religion, minScore } = req.query;
+    const currentUser = await User.findById(req.userId);
+    if (!currentUser) return res.status(404).json({ message: 'المستخدم غير موجود' });
+
+    // parse interests list if provided
+    const requestedInterests = interests ? String(interests).split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+
+    // Fetch candidate profiles (public) and opposite gender
+    const searchGender = currentUser.gender === 'male' ? 'female' : 'male';
+    const profileFilter = { isPublic: true };
+    if (location) profileFilter.location = { $regex: location, $options: 'i' };
+    const profiles = await Profile.find(profileFilter).populate('userId').exec();
+
+    const scored = profiles.map(profile => {
+      const pUser = profile.userId;
+      // basic eligibility
+      if (!pUser || pUser.status !== 'approved' || pUser.gender !== searchGender) {
+        return null;
+      }
+
+      let score = 0;
+
+      // location exact or substring
+      if (location && profile.location && profile.location.toLowerCase().includes(String(location).toLowerCase())) score += 25;
+
+      // age scoring
+      const age = profile.age || 0;
+      if (ageMin && ageMax) {
+        const aMin = Number(ageMin) || 0;
+        const aMax = Number(ageMax) || 0;
+        if (age >= aMin && age <= aMax) score += 20;
+      }
+
+      // religion match
+      if (religion && profile.religion && profile.religion.toLowerCase() === String(religion).toLowerCase()) score += 15;
+
+      // interests overlap
+      let interestsScore = 0;
+      const profileInterests = (profile.interests || []).map(i => String(i).toLowerCase());
+      if (requestedInterests.length > 0 && profileInterests.length > 0) {
+        const overlap = requestedInterests.filter(i => profileInterests.includes(i)).length;
+        interestsScore = Math.min(25, overlap * 8); // up to 24-25
+      } else if (requestedInterests.length === 0 && profileInterests.length > 0) {
+        // small score if they have interests but user didn't specify
+        interestsScore = 5;
+      }
+      score += interestsScore;
+
+      // profile completeness and picture
+      if (pUser.profilePicture) score += 10;
+      if (profile.profileComplete) score += 5;
+
+      // cap score at 100
+      score = Math.min(100, Math.round(score));
+
+      return { profile, score };
+    }).filter(Boolean);
+
+    const min = Number(minScore) || 0;
+    const filtered = scored.filter(s => s.score >= min).sort((a, b) => b.score - a.score);
+
+    res.json({ matches: filtered.map(s => ({ profile: s.profile, score: s.score })) });
+  } catch (error) {
+    console.error('خطأ في جلب المطابقات:', error);
+    res.status(500).json({ message: 'خطأ في جلب المطابقات' });
+  }
+});
+
 app.get('/api/profiles/:id', authMiddleware, async (req, res) => {
   try {
     const profile = await Profile.findById(req.params.id).populate('userId');
@@ -712,6 +919,60 @@ app.post('/api/admin/admins', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+app.get('/api/home-banner', async (req, res) => {
+  try {
+    const banner = await Banner.findOne().lean();
+    res.json({ banner: banner || {} });
+  } catch (error) {
+    console.error('خطأ في جلب إعدادات البنر:', error);
+    res.status(500).json({ message: 'خطأ في جلب إعدادات البنر' });
+  }
+});
+
+app.get('/api/admin/home-banner', adminAuthMiddleware, async (req, res) => {
+  try {
+    const banner = await Banner.findOne().lean();
+    res.json({ banner: banner || {} });
+  } catch (error) {
+    console.error('خطأ في جلب إعدادات البنر للمشرف:', error);
+    res.status(500).json({ message: 'خطأ في جلب إعدادات البنر' });
+  }
+});
+
+app.post('/api/admin/home-banner', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { imageUrl, title, description } = req.body;
+    if (!imageUrl) {
+      return res.status(400).json({ message: 'رابط الصورة مطلوب' });
+    }
+
+    const banner = await Banner.findOneAndUpdate(
+      {},
+      { imageUrl, title: title || '', description: description || '', updatedAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({ message: 'تم تحديث إعدادات البنر بنجاح', banner });
+  } catch (error) {
+    console.error('خطأ في تحديث إعدادات البنر:', error);
+    res.status(500).json({ message: 'خطأ في تحديث إعدادات البنر' });
+  }
+});
+
+app.post('/api/admin/home-banner/upload', adminAuthMiddleware, upload.single('bannerImage'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'لم يتم تحميل الصورة' });
+    }
+
+    const imageUrl = `${req.protocol}://${req.get('host')}/${req.file.filename}`;
+    res.json({ message: 'تم رفع الصورة بنجاح', imageUrl });
+  } catch (error) {
+    console.error('خطأ في رفع صورة البنر:', error);
+    res.status(500).json({ message: 'خطأ في رفع صورة البنر' });
+  }
+});
+
 app.post('/api/admin/user/:userId/activate', adminAuthMiddleware, async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(req.params.userId, { status: 'approved' }, { new: true }).select('-password');
@@ -929,6 +1190,31 @@ app.get('/api/admin/messages', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+// Admin: manager messages (notifications about auto-matches)
+app.get('/api/admin/manager-messages', adminAuthMiddleware, async (req, res) => {
+  try {
+    const msgs = await ManagerMessage.find().populate('newProfileId').populate('matchedProfileId').sort({ createdAt: -1 }).limit(200);
+    res.json({ messages: msgs });
+  } catch (error) {
+    console.error('خطأ في جلب رسائل الإدارة:', error);
+    res.status(500).json({ message: 'خطأ في جلب رسائل الإدارة' });
+  }
+});
+
+app.post('/api/admin/manager-messages/:id/read', adminAuthMiddleware, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const msg = await ManagerMessage.findById(id);
+    if (!msg) return res.status(404).json({ message: 'الرسالة غير موجودة' });
+    msg.read = true;
+    await msg.save();
+    res.json({ message: 'تم وضع الرسالة كمقروءة' });
+  } catch (error) {
+    console.error('خطأ في تحديث حالة الرسالة:', error);
+    res.status(500).json({ message: 'خطأ في تحديث حالة الرسالة' });
+  }
+});
+
 // Get current user profile
 app.get('/api/user/profile', authMiddleware, async (req, res) => {
   try {
@@ -949,8 +1235,23 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const HOST = process.env.BIND_HOST || '0.0.0.0';
+
+const getLocalIp = () => {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return 'localhost';
+};
+
+const localIp = getLocalIp();
+
+app.listen(PORT, HOST, () => {
   console.log(`🚀 خادم توفيق يعمل على http://localhost:${PORT}`);
+  console.log(`🌐 الوصول عبر الشبكة المحلية: http://${localIp}:${PORT}`);
 });
 
 export default app;

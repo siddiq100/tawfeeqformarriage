@@ -22,16 +22,24 @@ if [[ -n $(git status -s) ]]; then
 fi
 echo -e "${GREEN}✓ Git نظيف${NC}"
 
-# Step 2: Build client
-echo -e "${BLUE}2. بناء الواجهة الأمامية...${NC}"
-cd client
+# Step 2: Ensure server and static site are ready
+echo -e "${BLUE}2. تثبيت تبعيات الخادم...${NC}"
+cd server
 npm install
-npm run build
 cd ..
-echo -e "${GREEN}✓ تم بناء العميل${NC}"
+echo -e "${GREEN}✓ تم تثبيت تبعيات الخادم${NC}"
 
-# Step 3: Check server dependencies
-echo -e "${BLUE}3. التحقق من المتغيرات البيئية...${NC}"
+echo -e "${BLUE}3. التحقق من وجود موقع static الجديد...${NC}"
+if [ ! -d newproject ]; then
+    echo -e "${RED}✗ لم نجد مجلد newproject${NC}"
+    echo "تأكد أن الموقع الثابت موجود في مجلد newproject/"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ مجلد newproject موجود${NC}"
+
+# Step 4: Check server environment variables
+echo -e "${BLUE}4. التحقق من المتغيرات البيئية...${NC}"
 if [ ! -f .env ]; then
     echo -e "${RED}✗ لم نجد ملف .env${NC}"
     echo "انسخ .env.example إلى .env وملأ القيم:"
@@ -51,11 +59,21 @@ echo ""
 echo -e "${GREEN}✅ تم التحضير!${NC}"
 echo ""
 echo "الخطوات التالية:"
-echo "1. اذهب إلى: https://render.com"
-echo "2. انشئ Web Service جديد وربط مستودعك"
-echo "3. في Environment Variables أضف:"
+echo "1. ادفع الكود إلى GitHub إذا لم تفعل بعد."
+echo "2. افتح https://render.com وأنشئ Web Service جديدًا مرتبطًا بالمستودع."
+echo "   - Build command: cd server && npm install"
+echo "   - Start command: cd server && npm start"
+echo "3. أضف متغيرات البيئة في Render:"
 echo "   - MONGO_URI"
 echo "   - JWT_SECRET"
-echo "   - EMAIL_USER و EMAIL_PASS"
-echo "   - CLIENT_URL و CORS_ORIGIN"
+echo "   - EMAIL_HOST"
+echo "   - EMAIL_PORT"
+echo "   - EMAIL_USER"
+echo "   - EMAIL_PASS"
+echo "   - EMAIL_FROM"
+echo "   - CLIENT_URL = https://<your-service>.onrender.com"
+echo "   - CORS_ORIGIN = https://<your-service>.onrender.com"
+echo "4. تأكد أن الخدمة تستخدم فرع main."
+echo ""
+echo "بعد الإنشاء، سيرفر Render سيخدم الموقع الثابت من newproject/ تلقائيًا."
 echo ""

@@ -33,7 +33,9 @@
 > - `RENDER_SERVICE_ID` (الـ service id من Render)
 > - `RENDER_API_KEY` (Render API key)
 >
-> ثم استخدم وِرْك فْلُو `./github/workflows/deploy-render.yml` لنشر كل دفعه إلى Render.
+> يمكنك أيضًا تشغيل النشر يدويًا من صفحة Actions عبر زر `Run workflow` في `Deploy to Render`.
+>
+> ثم استخدم وِرْك فْلُو `.github/workflows/deploy-render.yml` لنشر كل دفعة إلى Render.
 
 ## تشغيل محلي (بدون Docker)
 1. تثبيت الخادم:

@@ -3,6 +3,7 @@ name: Deploy to Render
 on:
   push:
     branches: [ main, render-ready ]
+  workflow_dispatch:
 
 jobs:
   deploy:
